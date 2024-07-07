@@ -1,7 +1,5 @@
 #version: '3.8'
 # see here https://docs.docker.com/compose/compose-file/compose-versioning/
-version: '3.1'
-
 services:
 
   db:
@@ -9,7 +7,7 @@ services:
       context: ./db
       dockerfile: Dockerfile
     ports: 
-      - 27017:27017
+      - 6379:6379
     networks:
       - dummynetwork
   
@@ -17,11 +15,6 @@ services:
     build:
       context: ./be
       dockerfile: Dockerfile
-    #~dk getting rid of this because this hides all the files in /usr/src/app since I didn't specify
-    # the local folder on the host as a shared folder with virtualbox! Also, I have no idea why we
-    # need a shared volume here..
-    #volumes:
-    #  - './services/users:/usr/src/app'
     ports:
       - 5000:5000
     depends_on:

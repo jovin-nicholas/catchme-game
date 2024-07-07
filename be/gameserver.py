@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import time
 import threading
 from geopy.distance import geodesic
+from redis_lib import *
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -55,6 +56,42 @@ lock = threading.Lock()
 
 def app_settings():
     global g
+
+    # User data
+    user_id = 1001
+    username = "Elon Musk"
+    password = "Tesla"
+    status = "inactive"
+    latitude = "37.7749"
+    longitude = "-79.5555"
+    role = "cop"
+
+    # Store user location
+    store_user_location(user_id, username, password, status, latitude ,longitude, role)
+    
+    # User data
+    user_id = 1002
+    username = "Jeff Bezos"
+    password = "BlueHorizon"
+    status = "inactive"
+    latitude = "37.7749"
+    longitude = "-79.5555"
+    role = "mafia"
+
+    # Store user location
+    store_user_location(user_id, username, password, status, latitude ,longitude, role)
+
+    # User data
+    user_id = 1003
+    username = "Bill Gates"
+    password = "Clippy"
+    status = "inactive"
+    latitude = "35.89"
+    longitude = "-54.4194"
+    role = "mafia"
+
+    # Store user location
+    store_user_location(user_id, username, password, status, latitude ,longitude, role)
 
     # This key will be used when encoding and decoding the 
     # access tokens
@@ -103,14 +140,14 @@ def app_settings():
         g['user_ids'] = list(range(0, len(g['users'])))
 
         # Assign these users their roles
-        g['user_roles'] = ['cop', 'mafia', 'mafia']
+        # g['user_roles'] = ['cop', 'mafia', 'mafia']
 
     if 'logged_user' not in g:
         g['logged_userId'] = None
 
     # How closeby the cop must be to the mafia to arrest them
     # In meters
-    g['elimination_distance'] = 1
+    g['elimination_distance'] = 20
         
     # +++ DEBUG BLOCK: For debugging purposes only (REMOVE BEFORE DEPLOYING)
 
@@ -210,15 +247,22 @@ def decode_token(token):
 @cross_origin()
 def login():
     try:
-        user = request.json['name']
+        user_name = request.json['name']
         password = request.json['password']
+        role = request.json['role']
 
         # +++ DEBUG BLOCK: For debugging purposes only (REMOVE BEFORE DEPLOYING)
         
         # Get all users setup by app_settings()
-        available_users = read_app_settings('users')
+        #old code
+        # available_users = read_app_settings('users')
 
-        if user not in available_users:
+        #getting user credentials using redis
+        print("getting user details... ")
+        user = get_user_credentials(user_name)
+        print("outside if: ", user)
+
+        if user[1] == "":
 
             # +++ DEBUG BLOCK: For debugging purposes only (REMOVE BEFORE DEPLOYING)
             print('Unknown user trying to login ...')
@@ -230,11 +274,15 @@ def login():
         else:
 
             # Get the user's hashed password from app_settings()
-            password_hash = read_app_settings('password_hashes')[available_users.index(user)]
+            password_hash = user[2]
+            print("within else condition",user[2])
+            # password_hash = read_app_settings('password_hashes')[available_users.index(user)]
 
             # Hash the user provided password and compare it with
             # password_hash
-            if not bcrypt.check_password_hash(password_hash, password):
+            # if not bcrypt.check_password_hash(password_hash, password):
+            if password != password_hash:
+                print("within else-if condition ",user[2])
 
                 # Wrong password
                 server_response = (
@@ -242,13 +290,22 @@ def login():
                     HTTPStatus.UNAUTHORIZED
                 )
             else:
-                # Create the tokens for the user
-                user_id = read_app_settings('user_ids')[available_users.index(user)]
-                role = read_app_settings('user_roles')[read_app_settings('user_ids').index(user_id)]
+               # Create the tokens for the user
+                # user_id = read_app_settings('user_ids')[available_users.index(user)]
+                user_id = user[0]
+                
                 access_token = encode_token(user_id, "access")
+                print("else: access token ", access_token)
                 refresh_token = encode_token(user_id, "refresh")
                 expiration_time = decode_token(access_token)['expiration_time']
                 g['logged_userId'] = user_id
+                
+                user_data = fetch_user_data(user_id)
+                print(user_data)
+                user_data[2] = "active"
+                user_data[-1] = role
+
+                update_user(user_id, user_data)
                 
                 # Prepare the tokens for serialization
                 server_response = ({
@@ -291,7 +348,6 @@ def assign_role(player_id):
 # ==========================================================
 def distance(coord1, coord2):
     return geodesic(coord1, coord2).meters
-
 
 # ==========================================================
 # +++ Overall game timer +++
@@ -336,12 +392,24 @@ def get_player_location():
         
         # +++ DEBUG BLOCK: For debugging purposes only (REMOVE BEFORE DEPLOYING)
 
+        #debug
+        print("before update location: ", player_id, player_latitude, player_longitude, player_role)
+        #update the user's current location
+        update_location(player_id, player_latitude, player_longitude, player_role)
+         
+        print("[DONE]update location")
+
+        #Code to get data of all active users from redis
+        active_users = get_active_users()
+
         # Create a dictionary with player details to send back as a response
-        broadcast_recipients[player_id] = {
-            'role': player_role,
-            'latitude': player_latitude,
-            'longitude': player_longitude
-        }
+        for item in active_users:
+            for user_id, details in item.items():
+                broadcast_recipients[user_id] = {
+                    'role': details[-1],       # The last element in the list is the role
+                    'latitude': details[-3],   # The third last element is the latitude
+                    'longitude': details[-2]   # The second last element is the longitude
+                }
 
         with lock:
             if player_role == "cop":

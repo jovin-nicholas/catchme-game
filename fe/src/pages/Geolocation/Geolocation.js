@@ -41,17 +41,16 @@ const server_address = `${process.env.REACT_APP_API_SERVICE_URL}`;
 const socket = io(server_address);
 
 function GeoLocation(props) {
-
   // Set initial values for Latitude, Longitude, Heading, and Speed
-  const [Lat, setLat] = useState('Fetching Location');
-  const [Lon, setLng] = useState('Fetching Location');
+  const [Lat, setLat] = useState("Fetching Location");
+  const [Lon, setLng] = useState("Fetching Location");
   const [Hea, setHea] = useState(null);
   const [Spd, setSpd] = useState(null);
-  
+
   // Define the default zoom level
   const [zoom, setZoom] = useState(18);
 
-  // Define the default height 
+  // Define the default height
   const defaultHeight = 600;
 
   // Define the default latitude and longitude values
@@ -100,7 +99,7 @@ function GeoLocation(props) {
     try {
       const URI = server_address.concat("/location");
       const requestConfiguration = {
-        method: 'POST',
+        method: "POST",
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -125,7 +124,6 @@ function GeoLocation(props) {
       alert("Error occurred in reportPlayerLocation!");
       console.error(error);
     }
-    
   }, []);
 
   const updateLocation = useCallback(() => {
@@ -158,8 +156,30 @@ function GeoLocation(props) {
   // UseEffect hook to update location every 'x' seconds
   useEffect(() => {
     const role = readCookie('role');
-    const interval = setInterval(updateLocation, role === 'Cop' ? copUpdateDuration : mafiaUpdateDuration);
+    const interval = setInterval(updateLocation, role === 'cop' ? copUpdateDuration : mafiaUpdateDuration);
     return () => clearInterval(interval);
+  }, [updateLocation]);
+
+  // UseEffect hook to broadcast location
+  useEffect(() => {
+    socket.on('cop_location_update', (data) => {
+      setplayersCop((prevUsers) => ({ ...prevUsers, ...data }));
+    });
+
+    socket.on('mafia_location_update', (data) => {
+      setplayersMafia((prevUsers) => ({ ...prevUsers, ...data }));
+    });
+
+    socket.on('all_users', (data) => {
+      setplayersCop(data);
+      setplayersMafia(data);
+    });
+
+    socket.on('game_over', (data) => {
+      // Display game outcome
+      alert(data.result);
+    });
+
   }, [updateLocation]);
 
   // UseEffect hook to broadcast location
@@ -242,13 +262,15 @@ function GeoLocation(props) {
         {Object.keys(playersCop).map((userId) => {
           const user = playersCop[userId];
           const color = markerColors2[playersCop[userId].role];
+          const latitude = Number(playersCop[userId].latitude);
+          const longitude = Number(playersCop[userId].longitude);
           console.log(`Marker for user ${userId}:`, user, `Color: ${color}`);
           return (
             <Marker
               key={userId}
-              width={50}
+              width={70}
               color={color}
-              anchor={[playersCop[userId].latitude, playersCop[userId].longitude]}
+              anchor={[latitude, longitude]}
               onMouseOver={
                 () => mouseHoverActiveHandler(
                   userId, 
@@ -263,13 +285,16 @@ function GeoLocation(props) {
         {Object.keys(playersMafia).map((userId) => {
           const user = playersMafia[userId];
           const color = markerColors2[playersMafia[userId].role];
+          const latitude = Number(playersMafia[userId].latitude);
+          const longitude = Number(playersMafia[userId].longitude);
           console.log(`Marker for user ${userId}:`, user, `Color: ${color}`);
+          console.log(`Latitude: ${latitude}, Longitude: ${longitude}`);
           return (
             <Marker
               key={userId}
               width={50}
               color={color}
-              anchor={[playersMafia[userId].latitude, playersMafia[userId].longitude]}
+              anchor={[latitude, longitude]}
               onMouseOver={
                 () => mouseHoverActiveHandler(
                   userId, 

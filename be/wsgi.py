@@ -14,7 +14,13 @@ def main() -> None:
     timer_thread = threading.Thread(target=game_timer)
     timer_thread.start()
 
-    socketio.run(app, host = app_host, port = app_port, debug = app_debug_state)
+    socketio.run(
+        app, 
+        host = app_host, 
+        port = app_port, 
+        debug = app_debug_state,
+        allow_unsafe_werkzeug = True
+    )
 
 # Application entrypoint
 if __name__ == '__main__':
